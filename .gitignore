@@ -15,3 +15,6 @@ venv/
 .vscode/
 *.swp
 *.swo
+
+# Local config
+m7200.ini

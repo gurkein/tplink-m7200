@@ -1,0 +1,17 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+venv/
+.venv/
+
+# Editor/OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

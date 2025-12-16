@@ -1,6 +1,6 @@
 # TP-Link M7000/M7200 Python API
 
-Small Python client for TP-Link M7000/M7200 MiFi devices. It mirrors the `tp-link-m7200-api` PHP logic: fetch an auth challenge, encrypt login and follow-up calls with AES/RSA, and expose a few handy commands (status, SMS, network mode, reboot, arbitrary invokes).
+Small Python client for TP-Link M7000/M7200 MiFi devices. It fetches an auth challenge, encrypts login and follow-up calls with AES/RSA, and exposes handy commands (status, SMS, network mode, mobile data, reboot, arbitrary invokes).
 
 ## Setup
 ```bash
@@ -50,4 +50,4 @@ Flags `--host` and `--username` override config/defaults.
 ## Notes
 - AES-CBC key/IV are generated per login (numeric strings, 16 chars). RSA is chunked to support the 512-bit modulus the modem returns.
 - All requests are plain HTTP to the modem LAN IP (no TLS on the device).
-- This client only implements a subset of modules/actions. See the docstring in `m7200.py` for the full list of known module/action codes taken from the PHP project.
+- This client only implements a subset of modules/actions. See the docstring in `m7200.py` for the full list of known module/action codes.

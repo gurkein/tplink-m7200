@@ -36,7 +36,7 @@ This repo targets Python 3.13 and depends on `tp-connected`. Keep contributions 
 - Scrub logs/fixtures of sensitive values; prefer configuration files in `config/` with sane defaults and overrides via env vars.
 
 ## TP-Link M7000/M7200 Notes
-- The client uses AES-CBC and RSA (PKCS1 v1.5) mirroring `tp-link-m7200-api` challenge/login flow; keys/IVs are generated per login.
+- The client uses AES-CBC and RSA (PKCS1 v1.5) for the modem challenge/login flow; keys/IVs are generated per login.
 - `m7200.py` exposes commands for login, status, SMS send/read, network mode, mobile data toggle, reboot, and arbitrary module/action invocations.
 - Default modem host is `192.168.0.1` and username `admin`; override via CLI flags or `m7200.ini`.
 - Keep traffic on the modem LAN (HTTP only); avoid logging tokens or AES material at info level (use `-v` only for debugging).

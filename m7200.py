@@ -1,6 +1,6 @@
-"""TP-Link M7200 client (Python port of tp-link-m7200-api) with simple CLI.
+"""TP-Link M7200 client with simple CLI.
 
-Modules/actions (from tp-link-m7200-api/readme.MD):
+Modules/actions (reference from device docs/observed API):
 alg: getConfig=0, setConfig=1
 apBridge: getConfig=0, setConfig=1, connectAp=2, scanAp=3, checkConnStatus=4
 authenticator: load=0, login=1, getAttempt=2, logout=3, update=4

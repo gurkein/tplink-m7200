@@ -9,3 +9,4 @@ Versions use date-based versioning: YYYY.MM.DD.
 - Ignored `m7200.session.json` from version control.
 - Moved decrypted response logs to debug level.
 - Removed unused `tp-connected` dependency.
+- Replaced deprecated `datetime.utcnow()` usage with `datetime.now(UTC)`.

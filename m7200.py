@@ -44,7 +44,7 @@ import os
 import random
 import sys
 import tempfile
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -187,9 +187,11 @@ class TPLinkM7200:
         assert self.aes_key is not None
         assert self.aes_iv is not None
         assert self.rsa_mod is not None
+        created_at = datetime.now(UTC).isoformat(timespec="seconds")
+        created_at = created_at.replace("+00:00", "Z")
         return {
             "version": 1,
-            "created_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "created_at": created_at,
             "host": self.host,
             "username": self.username,
             "token": self.token,

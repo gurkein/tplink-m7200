@@ -35,12 +35,14 @@ wps: get=0, set=1, start=2, cancel=3
 import argparse
 import asyncio
 import base64
+import binascii
 import configparser
 import hashlib
 import json
 import logging
 import os
 import random
+import tempfile
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -179,6 +181,46 @@ class TPLinkM7200:
         self.token = data.get("token")
         return data
 
+    def export_session(self) -> Dict[str, Any]:
+        self._ensure_session()
+        assert self.aes_key is not None
+        assert self.aes_iv is not None
+        assert self.rsa_mod is not None
+        return {
+            "version": 1,
+            "created_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "host": self.host,
+            "username": self.username,
+            "token": self.token,
+            "rsa_mod": self.rsa_mod,
+            "rsa_pub": self.rsa_pub,
+            "seq_num": self.seq_num,
+            "aes_key_b64": base64.b64encode(self.aes_key).decode("ascii"),
+            "aes_iv_b64": base64.b64encode(self.aes_iv).decode("ascii"),
+        }
+
+    def import_session(self, data: Dict[str, Any]) -> None:
+        self.token = data.get("token")
+        self.rsa_mod = data.get("rsa_mod")
+        self.rsa_pub = data.get("rsa_pub", self.rsa_pub)
+        self.seq_num = data.get("seq_num")
+        aes_key_b64 = data.get("aes_key_b64")
+        aes_iv_b64 = data.get("aes_iv_b64")
+        if aes_key_b64 and aes_iv_b64:
+            try:
+                self.aes_key = base64.b64decode(aes_key_b64)
+                self.aes_iv = base64.b64decode(aes_iv_b64)
+            except (binascii.Error, ValueError):
+                self.aes_key = None
+                self.aes_iv = None
+
+    def clear_session(self) -> None:
+        self.seq_num = None
+        self.rsa_mod = None
+        self.aes_key = None
+        self.aes_iv = None
+        self.token = None
+
     def _ensure_session(self) -> None:
         if not self.token or not self.aes_key or not self.aes_iv or self.seq_num is None:
             raise RuntimeError("Client not authenticated. Call login() first.")
@@ -207,6 +249,13 @@ class TPLinkM7200:
         """Reboot device using module 'reboot', action 0."""
         return await self.invoke("reboot", 0)
 
+    async def validate_session(self) -> bool:
+        try:
+            response = await self.invoke("webServer", 2)
+        except Exception:
+            return False
+        return _is_success_response(response)
+
 
 # ---------- CLI ----------
 def build_cli_parser() -> argparse.ArgumentParser:
@@ -217,6 +266,11 @@ def build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="m7200.ini", help="Path to ini config (section [modem])")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     parser.add_argument("--token", help="Existing token (if provided, skip login)")
+    parser.add_argument(
+        "--session-file",
+        default=None,
+        help="Path to session cache file (default: m7200.session.json)",
+    )
 
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("login", help="Authenticate and print token/result")
@@ -263,7 +317,43 @@ def load_config(path: str) -> Dict[str, Any]:
         "host": modem_cfg.get("host"),
         "username": modem_cfg.get("username"),
         "password": modem_cfg.get("password"),
+        "session_file": modem_cfg.get("session_file"),
     }
+
+
+def _is_success_response(response: Dict[str, Any]) -> bool:
+    for key in ("errorCode", "errCode", "error_code"):
+        if key in response:
+            return response.get(key) == 0
+    return True
+
+
+def load_session_file(path: str) -> Optional[Dict[str, Any]]:
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_session_file(path: str, data: Dict[str, Any]) -> None:
+    if not path:
+        return
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=".m7200_session_", dir=directory or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 async def cli_main() -> None:
@@ -274,6 +364,7 @@ async def cli_main() -> None:
     host = args.host or cfg.get("host") or "192.168.0.1"
     username = args.username or cfg.get("username") or "admin"
     password = args.password or cfg.get("password")
+    session_file = args.session_file or cfg.get("session_file") or "m7200.session.json"
     if password is None:
         parser.error("Password must be provided via --password or config [modem].password")
 
@@ -284,9 +375,17 @@ async def cli_main() -> None:
 
     async with aiohttp.ClientSession() as session:
         client = TPLinkM7200(host, username, password, session)
+        session_data = load_session_file(session_file)
+        if session_data:
+            if session_data.get("host") == host and session_data.get("username") == username:
+                client.import_session(session_data)
+            else:
+                LOGGER.debug("Session file does not match host/username, ignoring.")
+                session_data = None
 
         if args.command == "login":
             result = await client.login()
+            save_session_file(session_file, client.export_session())
             print(json.dumps(result, indent=2))
             return
 
@@ -295,7 +394,13 @@ async def cli_main() -> None:
             if args.token:
                 client.token = args.token
                 # Need challenge to set RSA, seq, and AES keys, so perform login anyway.
-            await client.login()
+            elif session_data:
+                valid = await client.validate_session()
+                if not valid:
+                    client.clear_session()
+            if not client.token or not client.aes_key or not client.aes_iv:
+                await client.login()
+                save_session_file(session_file, client.export_session())
 
         if args.command == "reboot":
             resp = await client.reboot()

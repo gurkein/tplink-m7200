@@ -15,6 +15,7 @@ Optional config file `m7200.ini`:
 host=192.168.0.1
 username=admin
 password=your_password
+session_file=m7200.session.json
 ```
 
 ## CLI usage
@@ -45,7 +46,8 @@ python m7200.py --password YOUR_PASS reboot
 python m7200.py --password YOUR_PASS invoke status 0
 python m7200.py --password YOUR_PASS invoke wan 1 --data '{"networkPreferredMode":3}'
 ```
-Flags `--host` and `--username` override config/defaults.
+Flags `--host` and `--username` override config/defaults. Use `--session-file` (or `session_file` in
+`m7200.ini`) to cache the session bundle and reuse it on later runs (default: `m7200.session.json`).
 
 ## Notes
 - AES-CBC key/IV are generated per login (numeric strings, 16 chars). RSA is chunked to support the 512-bit modulus the modem returns.

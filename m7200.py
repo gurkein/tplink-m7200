@@ -405,30 +405,33 @@ def extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any
     parsed = {key: _parse_bytes(value) for key, value in fields.items()}
     total = parsed["totalStatistics"]
     limit = parsed["limitation"]
-    if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
-        remaining = max(limit - total, 0)
-        if human:
-            return {"remaining": _format_bytes(remaining)}
-        return {"remaining": remaining}
     if human:
         formatted = {
             key: (_format_bytes(value) if isinstance(value, int) else None)
             for key, value in parsed.items()
         }
-        return {
+        result: Dict[str, Any] = {
             "total": formatted["totalStatistics"],
             "daily": formatted["dailyStatistics"],
             "limitation": formatted["limitation"],
             "enable_data_limit": enable_data_limit,
             "data_limit": wan.get("dataLimit"),
+            "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
         }
-    return {
+        if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
+            result["remaining"] = _format_bytes(max(limit - total, 0))
+        return result
+    result = {
         "total": parsed["totalStatistics"],
         "daily": parsed["dailyStatistics"],
         "limitation": parsed["limitation"],
         "enable_data_limit": enable_data_limit,
         "data_limit": wan.get("dataLimit"),
+        "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
     }
+    if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
+        result["remaining"] = max(limit - total, 0)
+    return result
 
 
 def load_session_file(path: str) -> Optional[Dict[str, Any]]:

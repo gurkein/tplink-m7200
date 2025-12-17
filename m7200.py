@@ -328,10 +328,15 @@ def load_config(path: str) -> Dict[str, Any]:
 
 
 def _is_success_response(response: Dict[str, Any]) -> bool:
-    for key in ("errorCode", "errCode", "error_code"):
-        if key in response:
-            return response.get(key) == 0
-    return True
+    result = response.get("result")
+    if isinstance(result, int):
+        return result >= 0
+    if isinstance(result, str):
+        try:
+            return int(result) >= 0
+        except ValueError:
+            return False
+    return False
 
 
 def extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:

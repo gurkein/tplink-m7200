@@ -10,3 +10,4 @@ Versions use date-based versioning: YYYY.MM.DD.
 - Moved decrypted response logs to debug level.
 - Removed unused `tp-connected` dependency.
 - Replaced deprecated `datetime.utcnow()` usage with `datetime.now(UTC)`.
+- Added `pyproject.toml` and migrated code into `src/` with a `m7200` console script.

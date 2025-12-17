@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tplink-m7200"
+version = "2025.12.17"
+description = "TP-Link M7000/M7200 API client and CLI"
+readme = "README.md"
+requires-python = ">=3.13"
+license = {text = "UNLICENSED"}
+authors = [{name = "Gurkan"}]
+dependencies = [
+  "aiohttp>=3.8,<4.0",
+  "async-timeout>=4.0,<5.0",
+  "pycryptodomex>=3.20.0",
+]
+
+[project.scripts]
+m7200 = "tplink_m7200.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

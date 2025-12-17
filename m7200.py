@@ -97,10 +97,6 @@ def rsa_encrypt_hex(message: str, modulus_hex: str, exponent_hex: str) -> str:
 
 
 # ---------- Core client ----------
-class SessionDecryptionError(RuntimeError):
-    """Raised when a response cannot be decrypted with current session keys."""
-
-
 class TPLinkM7200:
     def __init__(self, host: str, username: str, password: str, session: aiohttp.ClientSession):
         self.host = host
@@ -248,10 +244,7 @@ class TPLinkM7200:
         LOGGER.debug("Invoke plaintext=%s len=%s sign=%s", plaintext, len(encrypted), sign_query)
 
         text = await self._post_json("/cgi-bin/web_cgi", {"data": encrypted, "sign": sign_hex})
-        try:
-            decrypted = aes_decrypt_b64(text, self.aes_key, self.aes_iv)
-        except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
-            raise SessionDecryptionError("Failed to decrypt response; session may be invalid.") from exc
+        decrypted = aes_decrypt_b64(text, self.aes_key, self.aes_iv)
         LOGGER.debug("Invoke decrypted=%s", decrypted)
         return json.loads(decrypted)
 
@@ -335,10 +328,15 @@ def load_config(path: str) -> Dict[str, Any]:
 
 
 def _is_success_response(response: Dict[str, Any]) -> bool:
-    for key in ("errorCode", "errCode", "error_code"):
-        if key in response:
-            return response.get(key) == 0
-    return True
+    result = response.get("result")
+    if isinstance(result, int):
+        return result >= 0
+    if isinstance(result, str):
+        try:
+            return int(result) >= 0
+        except ValueError:
+            return False
+    return False
 
 
 def extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
@@ -350,23 +348,6 @@ def extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
-
-
-async def invoke_with_reauth(
-    client: TPLinkM7200,
-    session_file: str,
-    module: str,
-    action: int,
-    data: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    try:
-        return await client.invoke(module, action, data)
-    except SessionDecryptionError:
-        LOGGER.warning("Session decrypt failed; re-authenticating.")
-        client.clear_session()
-        await client.login()
-        save_session_file(session_file, client.export_session())
-        return await client.invoke(module, action, data)
 
 
 def load_session_file(path: str) -> Optional[Dict[str, Any]]:
@@ -453,17 +434,17 @@ async def cli_main() -> None:
                 save_session_file(session_file, client.export_session())
 
         if args.command == "reboot":
-            resp = await invoke_with_reauth(client, session_file, "reboot", 0)
+            resp = await client.reboot()
             print(json.dumps(resp, indent=2))
         elif args.command == "invoke":
             data = json.loads(args.data) if args.data else None
-            resp = await invoke_with_reauth(client, session_file, args.module, args.action, data)
+            resp = await client.invoke(args.module, args.action, data)
             print(json.dumps(resp, indent=2))
         elif args.command == "send-sms":
             # UI payload example: {"sendMessage":{"to":"5555","textContent":"INTERNET","sendTime":"2025,12,16,14,27,19"}}
             send_time = datetime.now().strftime("%Y,%m,%d,%H,%M,%S")
             payload = {"sendMessage": {"to": args.number, "textContent": args.text, "sendTime": send_time}}
-            resp = await invoke_with_reauth(client, session_file, "message", 3, payload)
+            resp = await client.invoke("message", 3, payload)
             print(json.dumps(resp, indent=2))
         elif args.command == "read-sms":
             payload = {
@@ -471,20 +452,20 @@ async def cli_main() -> None:
                 "amountPerPage": args.page_size,
                 "box": args.box,
             }
-            resp = await invoke_with_reauth(client, session_file, "message", 2, payload)
+            resp = await client.invoke("message", 2, payload)
             print(json.dumps(resp, indent=2))
         elif args.command == "status":
-            resp = await invoke_with_reauth(client, session_file, "status", 0, None)
+            resp = await client.invoke("status", 0, None)
             print(json.dumps(resp, indent=2))
         elif args.command == "network-mode":
-            resp = await invoke_with_reauth(client, session_file, "wan", 1, {"networkPreferredMode": args.mode})
+            resp = await client.invoke("wan", 1, {"networkPreferredMode": args.mode})
             print(json.dumps(resp, indent=2))
         elif args.command == "mobile-data":
             payload = {"dataSwitchStatus": args.state == "on"}
-            resp = await invoke_with_reauth(client, session_file, "wan", 1, payload)
+            resp = await client.invoke("wan", 1, payload)
             print(json.dumps(resp, indent=2))
         elif args.command == "ip":
-            resp = await invoke_with_reauth(client, session_file, "status", 0, None)
+            resp = await client.invoke("status", 0, None)
             ip_value = extract_wan_ip(resp, args.ipv6)
             if not ip_value:
                 print("error: IP address not available in status response", file=sys.stderr)

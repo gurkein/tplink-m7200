@@ -10,4 +10,3 @@ Versions use date-based versioning: YYYY.MM.DD.
 - Moved decrypted response logs to debug level.
 - Removed unused `tp-connected` dependency.
 - Replaced deprecated `datetime.utcnow()` usage with `datetime.now(UTC)`.
-- Retry login when session decryption fails to avoid padding errors.

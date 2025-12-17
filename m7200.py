@@ -310,6 +310,9 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
     ip_p = sub.add_parser("ip", help="Fetch current IP (module=status, action=0)")
     ip_p.add_argument("--ipv6", action="store_true", help="Return IPv6 address instead of IPv4")
+
+    quota_p = sub.add_parser("quota", help="Fetch data quota/usage (module=status, action=0)")
+    quota_p.add_argument("--human", action="store_true", help="Format byte values with units")
     return parser
 
 
@@ -348,6 +351,62 @@ def extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _parse_bytes(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return None
+    return None
+
+
+def _format_bytes(value: int) -> str:
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+    size = float(value)
+    for unit in units:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} EiB"
+
+
+def extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any]]:
+    wan = status.get("wan")
+    if not isinstance(wan, dict):
+        return None
+    fields = {
+        "totalStatistics": wan.get("totalStatistics"),
+        "dailyStatistics": wan.get("dailyStatistics"),
+        "limitation": wan.get("limitation"),
+    }
+    parsed = {key: _parse_bytes(value) for key, value in fields.items()}
+    if human:
+        formatted = {
+            key: (_format_bytes(value) if isinstance(value, int) else None)
+            for key, value in parsed.items()
+        }
+        return {
+            "total": formatted["totalStatistics"],
+            "daily": formatted["dailyStatistics"],
+            "limitation": formatted["limitation"],
+            "enable_data_limit": wan.get("enableDataLimit"),
+            "data_limit": wan.get("dataLimit"),
+        }
+    return {
+        "total": parsed["totalStatistics"],
+        "daily": parsed["dailyStatistics"],
+        "limitation": parsed["limitation"],
+        "enable_data_limit": wan.get("enableDataLimit"),
+        "data_limit": wan.get("dataLimit"),
+    }
 
 
 def load_session_file(path: str) -> Optional[Dict[str, Any]]:
@@ -421,6 +480,7 @@ async def cli_main() -> None:
             "network-mode",
             "mobile-data",
             "ip",
+            "quota",
         ):
             if args.token:
                 client.token = args.token
@@ -471,6 +531,13 @@ async def cli_main() -> None:
                 print("error: IP address not available in status response", file=sys.stderr)
                 raise SystemExit(1)
             print(ip_value)
+        elif args.command == "quota":
+            resp = await client.invoke("status", 0, None)
+            quota = extract_quota(resp, args.human)
+            if quota is None:
+                print("error: quota data not available in status response", file=sys.stderr)
+                raise SystemExit(1)
+            print(json.dumps(quota, indent=2))
 
 
 if __name__ == "__main__":

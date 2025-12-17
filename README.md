@@ -43,6 +43,10 @@ python m7200.py --password YOUR_PASS read-sms --page 1 --page-size 8 --box 0
 python m7200.py --password YOUR_PASS ip
 python m7200.py --password YOUR_PASS ip --ipv6
 
+# Data quota/usage (module=status, action=0)
+python m7200.py --password YOUR_PASS quota
+python m7200.py --password YOUR_PASS quota --human
+
 # Reboot (module=reboot, action=0)
 python m7200.py --password YOUR_PASS reboot
 

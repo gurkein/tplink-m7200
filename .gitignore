@@ -18,3 +18,4 @@ venv/
 
 # Local config
 m7200.ini
+m7200.session.json

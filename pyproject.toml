@@ -9,7 +9,7 @@ description = "TP-Link M7000/M7200 API client and CLI"
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "UNLICENSED"}
-authors = [{name = "Gurkan"}]
+authors = [{name = "Gürkan Vural"}]
 dependencies = [
   "aiohttp>=3.8,<4.0",
   "async-timeout>=4.0,<5.0",

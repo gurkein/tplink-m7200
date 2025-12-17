@@ -15,6 +15,19 @@ dependencies = [
   "async-timeout>=4.0,<5.0",
   "pycryptodomex>=3.20.0",
 ]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Networking",
+]
+
+[project.urls]
+Homepage = "https://github.com/gurkein/tplink-m7200"
+Repository = "https://github.com/gurkein/tplink-m7200"
 
 [project.scripts]
 m7200 = "tplink_m7200.cli:main"

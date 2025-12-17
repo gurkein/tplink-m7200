@@ -176,7 +176,7 @@ class TPLinkM7200:
         text = await self._post_json("/cgi-bin/auth_cgi", payload)
         # Decrypt response with login key/iv
         decrypted = aes_decrypt_b64(text, self.aes_key, self.aes_iv)
-        LOGGER.info("Login decrypted=%s", decrypted)
+        LOGGER.debug("Login decrypted=%s", decrypted)
         data = json.loads(decrypted)
         self.token = data.get("token")
         return data
@@ -242,7 +242,7 @@ class TPLinkM7200:
 
         text = await self._post_json("/cgi-bin/web_cgi", {"data": encrypted, "sign": sign_hex})
         decrypted = aes_decrypt_b64(text, self.aes_key, self.aes_iv)
-        LOGGER.info("Invoke decrypted=%s", decrypted)
+        LOGGER.debug("Invoke decrypted=%s", decrypted)
         return json.loads(decrypted)
 
     async def reboot(self) -> Dict[str, Any]:

@@ -42,6 +42,7 @@ import json
 import logging
 import os
 import random
+import sys
 import tempfile
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -304,6 +305,9 @@ def build_cli_parser() -> argparse.ArgumentParser:
 
     data_p = sub.add_parser("mobile-data", help="Toggle mobile data (module=wan, action=1 saveConfig)")
     data_p.add_argument("state", choices=["on", "off"], help="Turn mobile data on/off")
+
+    ip_p = sub.add_parser("ip", help="Fetch current IP (module=status, action=0)")
+    ip_p.add_argument("--ipv6", action="store_true", help="Return IPv6 address instead of IPv4")
     return parser
 
 
@@ -326,6 +330,17 @@ def _is_success_response(response: Dict[str, Any]) -> bool:
         if key in response:
             return response.get(key) == 0
     return True
+
+
+def extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
+    wan = status.get("wan")
+    if not isinstance(wan, dict):
+        return None
+    key = "ipv6" if ipv6 else "ipv4"
+    value = wan.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def load_session_file(path: str) -> Optional[Dict[str, Any]]:
@@ -390,7 +405,16 @@ async def cli_main() -> None:
             return
 
         # For invoke/reboot, try to reuse provided token; otherwise login first.
-        if args.command in ("invoke", "reboot", "send-sms", "read-sms", "status", "network-mode", "mobile-data"):
+        if args.command in (
+            "invoke",
+            "reboot",
+            "send-sms",
+            "read-sms",
+            "status",
+            "network-mode",
+            "mobile-data",
+            "ip",
+        ):
             if args.token:
                 client.token = args.token
                 # Need challenge to set RSA, seq, and AES keys, so perform login anyway.
@@ -433,6 +457,13 @@ async def cli_main() -> None:
             payload = {"dataSwitchStatus": args.state == "on"}
             resp = await client.invoke("wan", 1, payload)
             print(json.dumps(resp, indent=2))
+        elif args.command == "ip":
+            resp = await client.invoke("status", 0, None)
+            ip_value = extract_wan_ip(resp, args.ipv6)
+            if not ip_value:
+                print("error: IP address not available in status response", file=sys.stderr)
+                raise SystemExit(1)
+            print(ip_value)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,10 @@ python m7200.py --password YOUR_PASS send-sms 5555 "INTERNET"
 # Read SMS inbox (module=message, action=2)
 python m7200.py --password YOUR_PASS read-sms --page 1 --page-size 8 --box 0
 
+# Current IP (module=status, action=0)
+python m7200.py --password YOUR_PASS ip
+python m7200.py --password YOUR_PASS ip --ipv6
+
 # Reboot (module=reboot, action=0)
 python m7200.py --password YOUR_PASS reboot
 

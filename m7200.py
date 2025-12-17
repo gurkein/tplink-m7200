@@ -368,6 +368,20 @@ def _parse_bytes(value: Any) -> Optional[int]:
     return None
 
 
+def _parse_bool(value: Any) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("1", "true", "yes", "on"):
+            return True
+        if normalized in ("0", "false", "no", "off"):
+            return False
+    return None
+
+
 def _format_bytes(value: int) -> str:
     units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
     size = float(value)
@@ -382,12 +396,20 @@ def extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any
     wan = status.get("wan")
     if not isinstance(wan, dict):
         return None
+    enable_data_limit = _parse_bool(wan.get("enableDataLimit"))
     fields = {
         "totalStatistics": wan.get("totalStatistics"),
         "dailyStatistics": wan.get("dailyStatistics"),
         "limitation": wan.get("limitation"),
     }
     parsed = {key: _parse_bytes(value) for key, value in fields.items()}
+    total = parsed["totalStatistics"]
+    limit = parsed["limitation"]
+    if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
+        remaining = max(limit - total, 0)
+        if human:
+            return {"remaining": _format_bytes(remaining)}
+        return {"remaining": remaining}
     if human:
         formatted = {
             key: (_format_bytes(value) if isinstance(value, int) else None)
@@ -397,14 +419,14 @@ def extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any
             "total": formatted["totalStatistics"],
             "daily": formatted["dailyStatistics"],
             "limitation": formatted["limitation"],
-            "enable_data_limit": wan.get("enableDataLimit"),
+            "enable_data_limit": enable_data_limit,
             "data_limit": wan.get("dataLimit"),
         }
     return {
         "total": parsed["totalStatistics"],
         "daily": parsed["dailyStatistics"],
         "limitation": parsed["limitation"],
-        "enable_data_limit": wan.get("enableDataLimit"),
+        "enable_data_limit": enable_data_limit,
         "data_limit": wan.get("dataLimit"),
     }
 

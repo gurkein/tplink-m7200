@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 Versions use date-based versioning: YYYYMMDD.
 
+## 20251218
+- Set Python requirement to 3.11+ with updated classifiers.
+- Added PyPI metadata and a publish workflow triggered on tags.
+- Added MIT license file and metadata.
+
 ## 20251217
 - Added session cache support with export/import and validation to reuse logins.
 - Added `session_file` support in `m7200.ini` and CLI caching flag.

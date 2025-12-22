@@ -65,6 +65,8 @@ Flags `--host` and `--username` override config/defaults. Use `--session-file` (
 When working from the repo without installing, `python m7200.py` works directly; use
 `PYTHONPATH=src python -m tplink_m7200` if you prefer module execution.
 
+Timeout: override with `--timeout` or `timeout_seconds` in `m7200.ini`.
+
 ## Notes
 - AES-CBC key/IV are generated per login (numeric strings, 16 chars). RSA is chunked to support the 512-bit modulus the modem returns.
 - All requests are plain HTTP to the modem LAN IP (no TLS on the device).

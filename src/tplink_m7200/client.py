@@ -34,12 +34,15 @@ wps: get=0, set=1, start=2, cancel=3
 
 import base64
 import binascii
+import configparser
 import hashlib
 import json
 import logging
+import os
 import random
+import tempfile
 from datetime import UTC, datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import aiohttp
 from Cryptodome.Cipher import AES, PKCS1_v1_5
@@ -243,43 +246,6 @@ class TPLinkM7200:
         """Reboot device using module 'reboot', action 0."""
         return await self.invoke("reboot", 0)
 
-    async def send_sms(self, number: str, text: str) -> Dict[str, Any]:
-        send_time = datetime.now().strftime("%Y,%m,%d,%H,%M,%S")
-        payload = {"sendMessage": {"to": number, "textContent": text, "sendTime": send_time}}
-        return await self.invoke("message", 3, payload)
-
-    async def read_sms(self, page: int = 1, page_size: int = 8, box: int = 0) -> Dict[str, Any]:
-        payload = {
-            "pageNumber": page,
-            "amountPerPage": page_size,
-            "box": box,
-        }
-        return await self.invoke("message", 2, payload)
-
-    async def get_status(self) -> Dict[str, Any]:
-        return await self.invoke("status", 0, None)
-
-    async def set_network_mode(self, mode: int) -> Dict[str, Any]:
-        return await self.invoke("wan", 1, {"networkPreferredMode": mode})
-
-    async def set_mobile_data(self, enabled: bool) -> Dict[str, Any]:
-        payload = {"dataSwitchStatus": enabled}
-        return await self.invoke("wan", 1, payload)
-
-    async def get_ip(self, ipv6: bool = False) -> str:
-        status = await self.get_status()
-        ip_value = _extract_wan_ip(status, ipv6)
-        if not ip_value:
-            raise RuntimeError("IP address not available in status response")
-        return ip_value
-
-    async def get_quota(self, human: bool = False) -> Dict[str, Any]:
-        status = await self.get_status()
-        quota = _extract_quota(status, human)
-        if quota is None:
-            raise RuntimeError("Quota data not available in status response")
-        return quota
-
     async def validate_session(self) -> bool:
         try:
             response = await self.invoke("webServer", 2)
@@ -300,96 +266,92 @@ def _is_success_response(response: Dict[str, Any]) -> bool:
     return False
 
 
-def _extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
-    wan = status.get("wan")
-    if not isinstance(wan, dict):
-        return None
-    key = "ipv6" if ipv6 else "ipv4"
-    value = wan.get(key)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _parse_bytes(value: Any) -> Optional[int]:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(float(value))
-        except ValueError:
-            return None
-    return None
-
-
-def _parse_bool(value: Any) -> Optional[bool]:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in ("1", "true", "yes", "on"):
-            return True
-        if normalized in ("0", "false", "no", "off"):
-            return False
-    return None
-
-
-def _format_bytes(value: int) -> str:
-    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
-    size = float(value)
-    for unit in units:
-        if size < 1024.0:
-            return f"{size:.1f} {unit}"
-        size /= 1024.0
-    return f"{size:.1f} EiB"
-
-
-def _extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any]]:
-    wan = status.get("wan")
-    if not isinstance(wan, dict):
-        return None
-    enable_data_limit = _parse_bool(wan.get("enableDataLimit"))
-    fields = {
-        "totalStatistics": wan.get("totalStatistics"),
-        "dailyStatistics": wan.get("dailyStatistics"),
-        "limitation": wan.get("limitation"),
+def load_config(path: str) -> Dict[str, Any]:
+    config = configparser.ConfigParser()
+    if not os.path.exists(path):
+        return {}
+    config.read(path)
+    modem_cfg = config["modem"] if "modem" in config else {}
+    return {
+        "host": modem_cfg.get("host"),
+        "username": modem_cfg.get("username"),
+        "password": modem_cfg.get("password"),
+        "session_file": modem_cfg.get("session_file"),
     }
-    parsed = {key: _parse_bytes(value) for key, value in fields.items()}
-    total = parsed["totalStatistics"]
-    limit = parsed["limitation"]
-    if human:
-        formatted = {
-            key: (_format_bytes(value) if isinstance(value, int) else None)
-            for key, value in parsed.items()
-        }
-        result: Dict[str, Any] = {
-            "total": formatted["totalStatistics"],
-            "daily": formatted["dailyStatistics"],
-            "limitation": formatted["limitation"],
-            "enable_data_limit": enable_data_limit,
-            "data_limit": wan.get("dataLimit"),
-            "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
-        }
-        if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
-            result["remaining"] = _format_bytes(max(limit - total, 0))
-        return result
-    result = {
-        "total": parsed["totalStatistics"],
-        "daily": parsed["dailyStatistics"],
-        "limitation": parsed["limitation"],
-        "enable_data_limit": enable_data_limit,
-        "data_limit": wan.get("dataLimit"),
-        "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
-    }
-    if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
-        result["remaining"] = max(limit - total, 0)
-    return result
 
 
-__all__ = ["TPLinkM7200"]
+def load_session_file(path: str) -> Optional[Dict[str, Any]]:
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_session_file(path: str, data: Dict[str, Any]) -> None:
+    if not path:
+        return
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=".m7200_session_", dir=directory or ".")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
+async def init_client(
+    session: aiohttp.ClientSession,
+    *,
+    host: Optional[str] = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    config_path: str = "m7200.ini",
+    session_file: Optional[str] = None,
+    auto_login: bool = True,
+    validate_session_state: bool = True,
+) -> Tuple[TPLinkM7200, str]:
+    cfg = load_config(config_path)
+    resolved_host = host or cfg.get("host") or "192.168.0.1"
+    resolved_username = username or cfg.get("username") or "admin"
+    resolved_password = password or cfg.get("password")
+    resolved_session_file = session_file or cfg.get("session_file") or "m7200.session.json"
+    if resolved_password is None:
+        raise ValueError("Password must be provided via argument or config [modem].password")
+
+    client = TPLinkM7200(resolved_host, resolved_username, resolved_password, session)
+    session_data = load_session_file(resolved_session_file)
+    if session_data:
+        if session_data.get("host") == resolved_host and session_data.get("username") == resolved_username:
+            client.import_session(session_data)
+        else:
+            LOGGER.debug("Session file does not match host/username, ignoring.")
+            session_data = None
+
+    if session_data and validate_session_state:
+        valid = await client.validate_session()
+        if not valid:
+            client.clear_session()
+
+    if auto_login and (not client.token or not client.aes_key or not client.aes_iv):
+        await client.login()
+        save_session_file(resolved_session_file, client.export_session())
+
+    return client, resolved_session_file
+
+
+__all__ = [
+    "TPLinkM7200",
+    "load_config",
+    "load_session_file",
+    "save_session_file",
+    "init_client",
+]

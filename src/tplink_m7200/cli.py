@@ -1,16 +1,12 @@
 import argparse
 import asyncio
-import configparser
 import json
 import logging
-import os
 import sys
-import tempfile
-from typing import Any, Dict, Optional
 
 import aiohttp
 
-from .client import TPLinkM7200
+from .client import TPLinkM7200, init_client
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,59 +66,9 @@ def build_cli_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def load_config(path: str) -> Dict[str, Any]:
-    config = configparser.ConfigParser()
-    if not os.path.exists(path):
-        return {}
-    config.read(path)
-    modem_cfg = config["modem"] if "modem" in config else {}
-    return {
-        "host": modem_cfg.get("host"),
-        "username": modem_cfg.get("username"),
-        "password": modem_cfg.get("password"),
-        "session_file": modem_cfg.get("session_file"),
-    }
-
-
-def load_session_file(path: str) -> Optional[Dict[str, Any]]:
-    if not path or not os.path.exists(path):
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def save_session_file(path: str, data: Dict[str, Any]) -> None:
-    if not path:
-        return
-    directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    fd, tmp_path = tempfile.mkstemp(prefix=".m7200_session_", dir=directory or ".")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-        os.chmod(tmp_path, 0o600)
-        os.replace(tmp_path, path)
-    finally:
-        if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 async def cli_main() -> None:
     parser = build_cli_parser()
     args = parser.parse_args()
-
-    cfg = load_config(args.config)
-    host = args.host or cfg.get("host") or "192.168.0.1"
-    username = args.username or cfg.get("username") or "admin"
-    password = args.password or cfg.get("password")
-    session_file = args.session_file or cfg.get("session_file") or "m7200.session.json"
-    if password is None:
-        parser.error("Password must be provided via --password or config [modem].password")
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -130,41 +76,24 @@ async def cli_main() -> None:
     )
 
     async with aiohttp.ClientSession() as session:
-        client = TPLinkM7200(host, username, password, session)
-        session_data = load_session_file(session_file)
-        if session_data:
-            if session_data.get("host") == host and session_data.get("username") == username:
-                client.import_session(session_data)
-            else:
-                LOGGER.debug("Session file does not match host/username, ignoring.")
-                session_data = None
+        try:
+            client, session_file = await init_client(
+                session,
+                host=args.host,
+                username=args.username,
+                password=args.password,
+                config_path=args.config,
+                session_file=args.session_file,
+                auto_login=args.command != "login",
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
 
         if args.command == "login":
             result = await client.login()
             save_session_file(session_file, client.export_session())
             print(json.dumps(result, indent=2))
             return
-
-        if args.command in (
-            "invoke",
-            "reboot",
-            "send-sms",
-            "read-sms",
-            "status",
-            "network-mode",
-            "mobile-data",
-            "ip",
-            "quota",
-        ):
-            if args.token:
-                client.token = args.token
-            elif session_data:
-                valid = await client.validate_session()
-                if not valid:
-                    client.clear_session()
-            if not client.token or not client.aes_key or not client.aes_iv:
-                await client.login()
-                save_session_file(session_file, client.export_session())
 
         if args.command == "reboot":
             resp = await client.reboot()

@@ -18,7 +18,6 @@ def build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument("--password", default=None, help="Password (required)")
     parser.add_argument("--config", default="m7200.ini", help="Path to ini config (section [modem])")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
-    parser.add_argument("--token", help="Existing token (if provided, skip login)")
     parser.add_argument(
         "--session-file",
         default=None,
@@ -30,7 +29,6 @@ def build_cli_parser() -> argparse.ArgumentParser:
     sub.add_parser("login", help="Authenticate and print token/result")
 
     reboot_p = sub.add_parser("reboot", help="Login then reboot")
-    reboot_p.add_argument("--token", help="Existing token (if provided, skip login)")
 
     invoke_p = sub.add_parser("invoke", help="Login then call arbitrary module/action")
     invoke_p.add_argument("module")

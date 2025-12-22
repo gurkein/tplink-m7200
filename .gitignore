@@ -10,6 +10,7 @@ dist/
 
 # Virtual environments
 venv/
+venv311/
 .venv/
 
 # Editor/OS noise
@@ -19,6 +20,7 @@ venv/
 *.swp
 *.swo
 .run/
+out/
 
 # Local config
 m7200.ini

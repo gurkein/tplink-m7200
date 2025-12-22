@@ -6,7 +6,7 @@ import sys
 
 import aiohttp
 
-from .client import TPLinkM7200, init_client
+from .client import init_client
 
 LOGGER = logging.getLogger(__name__)
 
@@ -92,8 +92,7 @@ async def cli_main() -> None:
             parser.error(str(exc))
 
         if args.command == "login":
-            result = await client.login()
-            save_session_file(session_file, client.export_session())
+            result = await client.login(session_file)
             print(json.dumps(result, indent=2))
             return
 

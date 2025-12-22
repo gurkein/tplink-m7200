@@ -98,6 +98,7 @@ class TPLinkM7200:
         self.username = username
         self.password = password
         self.session = session
+        self.timeout: Optional[float] = None
 
         self.seq_num: Optional[int] = None
         self.rsa_mod: Optional[str] = None
@@ -115,7 +116,7 @@ class TPLinkM7200:
         headers = {"Content-Type": "application/json", "Referer": f"{self.base_url}/"}
         data = json.dumps(body, separators=(",", ":"))
         LOGGER.debug("POST %s body=%s", url, data)
-        async with self.session.post(url, data=data, headers=headers) as resp:
+        async with self.session.post(url, data=data, headers=headers, timeout=self.timeout) as resp:
             text = await resp.text()
             LOGGER.debug("Response %s body=%s", resp.status, text)
             resp.raise_for_status()
@@ -316,6 +317,7 @@ async def init_client(
     password: Optional[str] = None,
     config_path: str = "m7200.ini",
     session_file: Optional[str] = None,
+    timeout_seconds: Optional[float] = None,
     auto_login: bool = True,
     validate_session_state: bool = True,
 ) -> Tuple[TPLinkM7200, str]:
@@ -324,10 +326,22 @@ async def init_client(
     resolved_username = username or cfg.get("username") or "admin"
     resolved_password = password or cfg.get("password")
     resolved_session_file = session_file or cfg.get("session_file") or "m7200.session.json"
+    resolved_timeout = timeout_seconds
+    if resolved_timeout is None:
+        cfg_timeout = cfg.get("timeout_seconds")
+        if cfg_timeout is not None:
+            try:
+                resolved_timeout = float(cfg_timeout)
+            except ValueError:
+                LOGGER.warning("Invalid timeout_seconds in config: %s", cfg_timeout)
+        else:
+            resolved_timeout = 10.0
+
     if resolved_password is None:
         raise ValueError("Password must be provided via argument or config [modem].password")
 
     client = TPLinkM7200(resolved_host, resolved_username, resolved_password, session)
+    client.timeout = resolved_timeout
     session_data = load_session_file(resolved_session_file)
     if session_data:
         if session_data.get("host") == resolved_host and session_data.get("username") == resolved_username:

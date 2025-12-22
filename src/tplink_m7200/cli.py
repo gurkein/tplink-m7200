@@ -24,6 +24,7 @@ def build_cli_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to session cache file (default: m7200.session.json)",
     )
+    parser.add_argument("--timeout", type=float, help="Request timeout in seconds")
 
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("login", help="Authenticate and print token/result")
@@ -84,6 +85,7 @@ async def cli_main() -> None:
                 password=args.password,
                 config_path=args.config,
                 session_file=args.session_file,
+                timeout_seconds=args.timeout,
                 auto_login=args.command != "login",
             )
         except ValueError as exc:

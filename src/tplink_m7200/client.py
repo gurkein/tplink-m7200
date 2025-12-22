@@ -334,13 +334,14 @@ async def init_client(
                 resolved_timeout = float(cfg_timeout)
             except ValueError:
                 LOGGER.warning("Invalid timeout_seconds in config: %s", cfg_timeout)
+        else:
+            resolved_timeout = 10.0
 
     if resolved_password is None:
         raise ValueError("Password must be provided via argument or config [modem].password")
 
     client = TPLinkM7200(resolved_host, resolved_username, resolved_password, session)
-    if resolved_timeout is not None:
-        client.timeout = resolved_timeout
+    client.timeout = resolved_timeout
     session_data = load_session_file(resolved_session_file)
     if session_data:
         if session_data.get("host") == resolved_host and session_data.get("username") == resolved_username:

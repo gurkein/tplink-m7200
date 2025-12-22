@@ -111,9 +111,7 @@ async def cli_main() -> None:
         if args.command == "login":
             result = await cli_action(client.login)()
             print(json.dumps(result, indent=2))
-            return
-
-        if args.command == "reboot":
+        elif args.command == "reboot":
             resp = await cli_action(client.reboot)()
             print(json.dumps(resp, indent=2))
         elif args.command == "invoke":
@@ -136,21 +134,11 @@ async def cli_main() -> None:
             resp = await cli_action(client.set_mobile_data)(args.state == "on")
             print(json.dumps(resp, indent=2))
         elif args.command == "ip":
-            try:
-                ip_value = await cli_action(client.get_ip)(args.ipv6)
-            except RuntimeError as exc:
-                print(f"error: {exc}", file=sys.stderr)
-                raise SystemExit(1)
-            else:
-                print(ip_value)
+            ip_value = await cli_action(client.get_ip)(args.ipv6)
+            print(ip_value)
         elif args.command == "quota":
-            try:
-                quota = await cli_action(client.get_quota)(args.human)
-            except RuntimeError as exc:
-                print(f"error: {exc}", file=sys.stderr)
-                raise SystemExit(1)
-            else:
-                print(json.dumps(quota, indent=2))
+            quota = await cli_action(client.get_quota)(args.human)
+            print(json.dumps(quota, indent=2))
 
 
 def main() -> None:

@@ -25,7 +25,7 @@ upnp: getConfig=0, setConfig=1, getUpnpDevList=2
 virtualServer: getConfig=0, setConfig=1, delVS=2
 voice: getConfig=0, sendUssd=1, cancelUssd=2, getSendStatus=3
 wan: getConfig=0, saveConfig=1, addProfile=2, deleteProfile=3, wzdAddProfile=7, setNetworkSelectionMode=8,
-     quaryAvailabelNetwork=9, getNetworkSelectionStatus=10, getDisconnectReason=11, cancelSearch=14, updateISP=15,
+     queryAvailableNetwork=9, getNetworkSelectionStatus=10, getDisconnectReason=11, cancelSearch=14, updateISP=15,
      bandSearch=16, getBandSearchStatus=17, setSelectedBand=18, cancelBandSearch=19
 webServer: getLang=0, setLang=1, keepAlive=2, unsetDefault=3, getModuleList=4, getFeatureList=5, getWithoutAuthInfo=6
 wlan: getConfig=0, setConfig=1, setNoneWlan=2

@@ -6,6 +6,7 @@ Versions use date-based versioning: YYYYMMDD.
 ## 20251219
 - Added client helpers for SMS, status, network mode, mobile data, IP, and quota.
 - Added configurable request timeout (config/CLI) for HTTP calls; default 10s.
+- CLI now exits non-zero and prints stderr on network/timeout/runtime errors.
 
 ## 20251218
 - Set Python requirement to 3.11+ with updated classifiers.

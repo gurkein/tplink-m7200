@@ -3,12 +3,31 @@ import asyncio
 import json
 import logging
 import sys
+from functools import wraps
 
 import aiohttp
 
 from .client import init_client
 
 LOGGER = logging.getLogger(__name__)
+
+
+def cli_action(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except aiohttp.ClientError as exc:
+            print(f"error: network failure: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        except asyncio.TimeoutError:
+            print("error: request timed out", file=sys.stderr)
+            raise SystemExit(1)
+        except Exception as exc:  # noqa: BLE001
+            print(f"error: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+
+    return wrapper
 
 
 def build_cli_parser() -> argparse.ArgumentParser:
@@ -90,35 +109,35 @@ async def cli_main() -> None:
             parser.error(str(exc))
 
         if args.command == "login":
-            result = await client.login(session_file)
+            result = await cli_action(client.login)()
             print(json.dumps(result, indent=2))
             return
 
         if args.command == "reboot":
-            resp = await client.reboot()
+            resp = await cli_action(client.reboot)()
             print(json.dumps(resp, indent=2))
         elif args.command == "invoke":
             data = json.loads(args.data) if args.data else None
-            resp = await client.invoke(args.module, args.action, data)
+            resp = await cli_action(client.invoke)(args.module, args.action, data)
             print(json.dumps(resp, indent=2))
         elif args.command == "send-sms":
-            resp = await client.send_sms(args.number, args.text)
+            resp = await cli_action(client.send_sms)(args.number, args.text)
             print(json.dumps(resp, indent=2))
         elif args.command == "read-sms":
-            resp = await client.read_sms(args.page, args.page_size, args.box)
+            resp = await cli_action(client.read_sms)(args.page, args.page_size, args.box)
             print(json.dumps(resp, indent=2))
         elif args.command == "status":
-            resp = await client.get_status()
+            resp = await cli_action(client.get_status)()
             print(json.dumps(resp, indent=2))
         elif args.command == "network-mode":
-            resp = await client.set_network_mode(args.mode)
+            resp = await cli_action(client.set_network_mode)(args.mode)
             print(json.dumps(resp, indent=2))
         elif args.command == "mobile-data":
-            resp = await client.set_mobile_data(args.state == "on")
+            resp = await cli_action(client.set_mobile_data)(args.state == "on")
             print(json.dumps(resp, indent=2))
         elif args.command == "ip":
             try:
-                ip_value = await client.get_ip(args.ipv6)
+                ip_value = await cli_action(client.get_ip)(args.ipv6)
             except RuntimeError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 raise SystemExit(1)
@@ -126,7 +145,7 @@ async def cli_main() -> None:
                 print(ip_value)
         elif args.command == "quota":
             try:
-                quota = await client.get_quota(args.human)
+                quota = await cli_action(client.get_quota)(args.human)
             except RuntimeError as exc:
                 print(f"error: {exc}", file=sys.stderr)
                 raise SystemExit(1)

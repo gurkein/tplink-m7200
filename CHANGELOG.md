@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file.
 Versions use date-based versioning: YYYYMMDD.
 
-## 20251220
+## 20251222
 - CLI now exits non-zero and prints stderr on network/timeout/runtime errors.
 - Added configurable request timeout (config/CLI) for HTTP calls; default 10s.
 - Added client helpers for SMS, status, network mode, mobile data, IP, and quota.

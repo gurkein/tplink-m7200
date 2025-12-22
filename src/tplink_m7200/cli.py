@@ -6,7 +6,6 @@ import logging
 import os
 import sys
 import tempfile
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 import aiohttp
@@ -83,98 +82,6 @@ def load_config(path: str) -> Dict[str, Any]:
         "password": modem_cfg.get("password"),
         "session_file": modem_cfg.get("session_file"),
     }
-
-
-def extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
-    wan = status.get("wan")
-    if not isinstance(wan, dict):
-        return None
-    key = "ipv6" if ipv6 else "ipv4"
-    value = wan.get(key)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _parse_bytes(value: Any) -> Optional[int]:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(float(value))
-        except ValueError:
-            return None
-    return None
-
-
-def _parse_bool(value: Any) -> Optional[bool]:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in ("1", "true", "yes", "on"):
-            return True
-        if normalized in ("0", "false", "no", "off"):
-            return False
-    return None
-
-
-def _format_bytes(value: int) -> str:
-    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
-    size = float(value)
-    for unit in units:
-        if size < 1024.0:
-            return f"{size:.1f} {unit}"
-        size /= 1024.0
-    return f"{size:.1f} EiB"
-
-
-def extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any]]:
-    wan = status.get("wan")
-    if not isinstance(wan, dict):
-        return None
-    enable_data_limit = _parse_bool(wan.get("enableDataLimit"))
-    fields = {
-        "totalStatistics": wan.get("totalStatistics"),
-        "dailyStatistics": wan.get("dailyStatistics"),
-        "limitation": wan.get("limitation"),
-    }
-    parsed = {key: _parse_bytes(value) for key, value in fields.items()}
-    total = parsed["totalStatistics"]
-    limit = parsed["limitation"]
-    if human:
-        formatted = {
-            key: (_format_bytes(value) if isinstance(value, int) else None)
-            for key, value in parsed.items()
-        }
-        result: Dict[str, Any] = {
-            "total": formatted["totalStatistics"],
-            "daily": formatted["dailyStatistics"],
-            "limitation": formatted["limitation"],
-            "enable_data_limit": enable_data_limit,
-            "data_limit": wan.get("dataLimit"),
-            "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
-        }
-        if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
-            result["remaining"] = _format_bytes(max(limit - total, 0))
-        return result
-    result = {
-        "total": parsed["totalStatistics"],
-        "daily": parsed["dailyStatistics"],
-        "limitation": parsed["limitation"],
-        "enable_data_limit": enable_data_limit,
-        "data_limit": wan.get("dataLimit"),
-        "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
-    }
-    if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
-        result["remaining"] = max(limit - total, 0)
-    return result
 
 
 def load_session_file(path: str) -> Optional[Dict[str, Any]]:
@@ -267,42 +174,36 @@ async def cli_main() -> None:
             resp = await client.invoke(args.module, args.action, data)
             print(json.dumps(resp, indent=2))
         elif args.command == "send-sms":
-            send_time = datetime.now().strftime("%Y,%m,%d,%H,%M,%S")
-            payload = {"sendMessage": {"to": args.number, "textContent": args.text, "sendTime": send_time}}
-            resp = await client.invoke("message", 3, payload)
+            resp = await client.send_sms(args.number, args.text)
             print(json.dumps(resp, indent=2))
         elif args.command == "read-sms":
-            payload = {
-                "pageNumber": args.page,
-                "amountPerPage": args.page_size,
-                "box": args.box,
-            }
-            resp = await client.invoke("message", 2, payload)
+            resp = await client.read_sms(args.page, args.page_size, args.box)
             print(json.dumps(resp, indent=2))
         elif args.command == "status":
-            resp = await client.invoke("status", 0, None)
+            resp = await client.get_status()
             print(json.dumps(resp, indent=2))
         elif args.command == "network-mode":
-            resp = await client.invoke("wan", 1, {"networkPreferredMode": args.mode})
+            resp = await client.set_network_mode(args.mode)
             print(json.dumps(resp, indent=2))
         elif args.command == "mobile-data":
-            payload = {"dataSwitchStatus": args.state == "on"}
-            resp = await client.invoke("wan", 1, payload)
+            resp = await client.set_mobile_data(args.state == "on")
             print(json.dumps(resp, indent=2))
         elif args.command == "ip":
-            resp = await client.invoke("status", 0, None)
-            ip_value = extract_wan_ip(resp, args.ipv6)
-            if not ip_value:
-                print("error: IP address not available in status response", file=sys.stderr)
+            try:
+                ip_value = await client.get_ip(args.ipv6)
+            except RuntimeError as exc:
+                print(f"error: {exc}", file=sys.stderr)
                 raise SystemExit(1)
-            print(ip_value)
+            else:
+                print(ip_value)
         elif args.command == "quota":
-            resp = await client.invoke("status", 0, None)
-            quota = extract_quota(resp, args.human)
-            if quota is None:
-                print("error: quota data not available in status response", file=sys.stderr)
+            try:
+                quota = await client.get_quota(args.human)
+            except RuntimeError as exc:
+                print(f"error: {exc}", file=sys.stderr)
                 raise SystemExit(1)
-            print(json.dumps(quota, indent=2))
+            else:
+                print(json.dumps(quota, indent=2))
 
 
 def main() -> None:

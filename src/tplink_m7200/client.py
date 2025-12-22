@@ -243,6 +243,43 @@ class TPLinkM7200:
         """Reboot device using module 'reboot', action 0."""
         return await self.invoke("reboot", 0)
 
+    async def send_sms(self, number: str, text: str) -> Dict[str, Any]:
+        send_time = datetime.now().strftime("%Y,%m,%d,%H,%M,%S")
+        payload = {"sendMessage": {"to": number, "textContent": text, "sendTime": send_time}}
+        return await self.invoke("message", 3, payload)
+
+    async def read_sms(self, page: int = 1, page_size: int = 8, box: int = 0) -> Dict[str, Any]:
+        payload = {
+            "pageNumber": page,
+            "amountPerPage": page_size,
+            "box": box,
+        }
+        return await self.invoke("message", 2, payload)
+
+    async def get_status(self) -> Dict[str, Any]:
+        return await self.invoke("status", 0, None)
+
+    async def set_network_mode(self, mode: int) -> Dict[str, Any]:
+        return await self.invoke("wan", 1, {"networkPreferredMode": mode})
+
+    async def set_mobile_data(self, enabled: bool) -> Dict[str, Any]:
+        payload = {"dataSwitchStatus": enabled}
+        return await self.invoke("wan", 1, payload)
+
+    async def get_ip(self, ipv6: bool = False) -> str:
+        status = await self.get_status()
+        ip_value = _extract_wan_ip(status, ipv6)
+        if not ip_value:
+            raise RuntimeError("IP address not available in status response")
+        return ip_value
+
+    async def get_quota(self, human: bool = False) -> Dict[str, Any]:
+        status = await self.get_status()
+        quota = _extract_quota(status, human)
+        if quota is None:
+            raise RuntimeError("Quota data not available in status response")
+        return quota
+
     async def validate_session(self) -> bool:
         try:
             response = await self.invoke("webServer", 2)
@@ -261,6 +298,98 @@ def _is_success_response(response: Dict[str, Any]) -> bool:
         except ValueError:
             return False
     return False
+
+
+def _extract_wan_ip(status: Dict[str, Any], ipv6: bool) -> Optional[str]:
+    wan = status.get("wan")
+    if not isinstance(wan, dict):
+        return None
+    key = "ipv6" if ipv6 else "ipv4"
+    value = wan.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _parse_bytes(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_bool(value: Any) -> Optional[bool]:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ("1", "true", "yes", "on"):
+            return True
+        if normalized in ("0", "false", "no", "off"):
+            return False
+    return None
+
+
+def _format_bytes(value: int) -> str:
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"]
+    size = float(value)
+    for unit in units:
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} EiB"
+
+
+def _extract_quota(status: Dict[str, Any], human: bool) -> Optional[Dict[str, Any]]:
+    wan = status.get("wan")
+    if not isinstance(wan, dict):
+        return None
+    enable_data_limit = _parse_bool(wan.get("enableDataLimit"))
+    fields = {
+        "totalStatistics": wan.get("totalStatistics"),
+        "dailyStatistics": wan.get("dailyStatistics"),
+        "limitation": wan.get("limitation"),
+    }
+    parsed = {key: _parse_bytes(value) for key, value in fields.items()}
+    total = parsed["totalStatistics"]
+    limit = parsed["limitation"]
+    if human:
+        formatted = {
+            key: (_format_bytes(value) if isinstance(value, int) else None)
+            for key, value in parsed.items()
+        }
+        result: Dict[str, Any] = {
+            "total": formatted["totalStatistics"],
+            "daily": formatted["dailyStatistics"],
+            "limitation": formatted["limitation"],
+            "enable_data_limit": enable_data_limit,
+            "data_limit": wan.get("dataLimit"),
+            "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
+        }
+        if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
+            result["remaining"] = _format_bytes(max(limit - total, 0))
+        return result
+    result = {
+        "total": parsed["totalStatistics"],
+        "daily": parsed["dailyStatistics"],
+        "limitation": parsed["limitation"],
+        "enable_data_limit": enable_data_limit,
+        "data_limit": wan.get("dataLimit"),
+        "enable_payment_day": _parse_bool(wan.get("enablePaymentDay")),
+    }
+    if enable_data_limit is True and isinstance(total, int) and isinstance(limit, int):
+        result["remaining"] = max(limit - total, 0)
+    return result
 
 
 __all__ = ["TPLinkM7200"]

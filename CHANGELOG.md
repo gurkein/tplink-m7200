@@ -3,6 +3,9 @@
 All notable changes to this project are documented in this file.
 Versions use date-based versioning: YYYYMMDD.
 
+## 20251219
+- Added client helpers for SMS, status, network mode, mobile data, IP, and quota.
+
 ## 20251218
 - Set Python requirement to 3.11+ with updated classifiers.
 - Added PyPI metadata and a publish workflow triggered on tags.
